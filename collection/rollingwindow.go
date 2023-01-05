@@ -58,7 +58,7 @@ func (w *window) resetBucket(offset int) {
 type (
 	RollingWindowOption func(rollingwindow *RollingWindow)
 
-	//RollingWindow 滑动窗口
+	//RollingWindow 滑动时间窗口
 	//
 	//
 	//
@@ -102,6 +102,21 @@ func (rw *RollingWindow) Add(v float64) {
 }
 
 func (rw *RollingWindow) updateOffset() {
+	span := rw.span()
+
+	if span <= 0 {
+		return
+	}
+
+	offset := rw.offset
+
+	for i := 0; i < span; i++ {
+		rw.win.buckets[(offset+i+1)%rw.size].reset()
+	}
+	rw.offset = (offset + span) % rw.size
+
+	now := timex.Now()
+	rw.interval = now - (now-rw.lastTime)%rw.interval
 
 }
 
@@ -114,5 +129,23 @@ func (rw *RollingWindow) span() int {
 }
 
 func (rw *RollingWindow) Reduce(fn func(b *Bucket)) {
+	span := rw.span()
 
+	var diff int
+
+	if span == 0 && rw.ignoreCurrent {
+		diff = rw.size - 1
+	} else {
+		diff = rw.size - span
+	}
+	if diff > 0 {
+		offset := (rw.offset + span + 1) % rw.size
+		rw.win.reduce(offset, diff, fn)
+	}
+}
+
+func IngoreCurrentBucket() RollingWindowOption {
+	return func(rollingwindow *RollingWindow) {
+		rollingwindow.ignoreCurrent = true
+	}
 }
